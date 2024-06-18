@@ -18,7 +18,7 @@ dev = ["pytest"]
 
 [tool.pytest.ini_options]
 markers = [
-    "dev: test devnet (deselect with '-m dev')",
+    "dev: test devnet (select with '-m dev')",
 ]
 addopts = [
   "-m not dev",
