@@ -1,16 +1,21 @@
-# 100x Python Client
+# Hundred Keks 🤪
 
-This is a Python client for the 100x API. It is a simple wrapper around the API, and provides a convenient way to interact with the API from Python.
+This is a fork of 8baller's 100x Python Client [hundred-x](https://github.com/8ball030/hundred_x).
+
+I focused on updating everything to latest, which makes it more likely to break.
+
+Differences include:
+- uses my fork of [py-eip712-structs](https://github.com/wakamex/py-eip712-structs) (see [changes](https://github.com/wakamex/py-eip712-structs?tab=readme-ov-file#changes-in-12))
+- use of `uv` instead of `poetry`
+- test with python up to 3.12
+- no longer support python 3.9
+- test on ubuntu-latest
+- fewer direct dependencies
+- target py312 in black
+
 
 ## Installation
 ```bash
-pip install hundred-x
+clone the repo
+uv pip install -e .
 ``
-
-## Running a dockerised environment
-```bash
-docker buildx build --platform linux/amd64 . -t test
-# now we have the dependencies installed,
-# we can mount the current directory and run the tests against the dockerised environment
-docker run -v (pwd):/app -it test
-```
