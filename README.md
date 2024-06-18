@@ -11,11 +11,12 @@ Differences include:
 - no longer support python 3.9
 - test on ubuntu-latest
 - fewer direct dependencies
-- target py312 in black
+- fewer lint tools (ruff replaces black, isort, flake8, and pylint)
+- only pytest for testing (no tox)
 
 
 ## Installation
 ```bash
 clone the repo
 uv pip install -e .
-``
+```
