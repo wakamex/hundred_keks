@@ -1,8 +1,8 @@
-"""
-Constants for the hundred_x package.
-"""
+"""Constants for the hundred_x package."""
 
 from hundred_x.enums import ApiType, Environment
+
+SUCCESS_CODE = 200
 
 DEVNET_REST_URL = "https://api.dev.ciaobella.dev"
 DEVNET_WEBSOCKET_URL = "https://stream.dev.ciaobella.dev"
@@ -12,6 +12,9 @@ TESTNET_WEBSOCKET_URL = "https://stream.staging.100x.finance"
 
 MAINNET_REST_URL = "https://api.100x.finance"
 MAINNET_WEBSOCKET_URL = "https://stream.100x.finance"
+
+BLAST_MAINNET_RPC = "https://rpc.blast.io"
+BLAST_SEPOLIA_RPC = "https://sepolia.blast.io"
 
 REFERRAL_CODE = "8baller"
 
@@ -28,6 +31,12 @@ APIS = {
         ApiType.REST: DEVNET_REST_URL,
         ApiType.WEBSOCKET: DEVNET_WEBSOCKET_URL,
     },
+}
+
+RPCS = {
+    Environment.TESTNET: BLAST_SEPOLIA_RPC,
+    Environment.PROD: BLAST_MAINNET_RPC,
+    Environment.DEVNET: BLAST_SEPOLIA_RPC,
 }
 
 
