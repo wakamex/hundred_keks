@@ -64,7 +64,7 @@ class Testnet(TestCase):
         """
         Set up the Client class tests.
         """
-        self.client = HundredXClient(env=self.environment, private_key=TEST_PRIVATE_KEY, subaccount_id=1)
+        self.client = HundredXClient(private_key=TEST_PRIVATE_KEY, env=self.environment, subaccount_id=1)
         cancel_order = self.client.cancel_all_orders(subaccount_id=1, product_id=1002)
         assert cancel_order is not None
         cancel_order = self.client.cancel_all_orders(subaccount_id=1, product_id=1006)
@@ -397,4 +397,4 @@ class Devnet(Testnet):
         Set up the Client class tests.
         """
         self.environment = Environment.DEVNET
-        self.client = HundredXClient(env=self.environment, private_key=TEST_PRIVATE_KEY, subaccount_id=1)
+        self.client = HundredXClient(private_key=TEST_PRIVATE_KEY, env=self.environment, subaccount_id=1)

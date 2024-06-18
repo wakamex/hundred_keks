@@ -1,23 +1,22 @@
-"""
-
-Client class is a wrapper around the REST API of the exchange. It provides methods to interact with the exchange API.
-"""
+"""Wrap the the REST API of the exchange."""
 
 import time
 from decimal import Decimal
 from typing import Any, List
 
-import eth_account
 import requests
+from dotenv import load_dotenv
 from eip712_structs import make_domain
 from eth_account.messages import encode_structured_data
 from web3 import Web3
 from web3.exceptions import TransactionNotFound
 
-from hundred_x.constants import APIS, CONTRACTS, LOGIN_MESSAGE, REFERRAL_CODE
+from hundred_x.constants import APIS, CONTRACTS, LOGIN_MESSAGE, REFERRAL_CODE, RPCS, SUCCESS_CODE
 from hundred_x.eip_712 import CancelOrder, CancelOrders, LoginMessage, Order, Referral, Withdraw
 from hundred_x.enums import ApiType, Environment, OrderSide, OrderType, TimeInForce
 from hundred_x.utils import from_message_to_payload, get_abi
+
+load_dotenv()
 
 headers = {
     "Accept": "application/json",
@@ -27,26 +26,31 @@ headers = {
 
 PROTOCOL_ABI = get_abi("protocol")
 ERC_20_ABI = get_abi("erc20")
+TIMEOUT = 60
 
 
 class HundredXClient:
+    """The 100x client."""
+
     def __init__(
         self,
+        private_key: str,
         env: Environment = Environment.TESTNET,
-        private_key: str = None,
         subaccount_id: int = 0,
+        rpc_uri: str | None = None,
     ):
-        """
-        Initialize the client with the given environment.
-        """
+        """Initialize the client with the given environment."""
+        if subaccount_id < 0 or subaccount_id > 255:
+            raise ValueError("Subaccount ID must be a number between 0 and 255.")
         self.env = env
+        self.rpc_uri = rpc_uri or RPCS[env]
         self.rest_url = APIS[env][ApiType.REST]
         self.websocket_url = APIS[env][ApiType.WEBSOCKET]
-        self.wallet = eth_account.Account.from_key(private_key)
-        self.public_key = self.wallet.address
         self.subaccount_id = subaccount_id
         self.session_cookie = {}
-        self.web3 = Web3(Web3.HTTPProvider("https://sepolia.blast.io"))
+        self.web3 = Web3(Web3.HTTPProvider(self.rpc_uri))
+        self.wallet = self.web3.eth.account.from_key(private_key)
+        self.public_key = self.wallet.address
         self.domain = make_domain(
             name="100x",
             version="0.0.0",
@@ -56,13 +60,11 @@ class HundredXClient:
         self.set_referral_code()
 
     def _current_timestamp(self):
-        timestamp_ms = int(time.time() * 1000)
-        return timestamp_ms
+        """Return current timestamp in milliseconds."""
+        return int(time.time() * 1000)
 
     def generate_and_sign_message(self, message_class, **kwargs):
-        """
-        Generate and sign a message.
-        """
+        """Generate and sign a message."""
         message = message_class(**kwargs)
         message = message.to_message(self.domain)
         signable_message = encode_structured_data(message)
@@ -70,7 +72,8 @@ class HundredXClient:
         message["message"]["signature"] = signed.signature.hex()
         return message["message"]
 
-    def get_shared_params(self, asset: str = None, subaccount_id: int = None):
+    def get_shared_params(self, asset: str | None = None, subaccount_id: int | None = None):
+        """Return shared parameters for requests."""
         params = {
             "account": self.public_key,
         }
@@ -81,25 +84,21 @@ class HundredXClient:
         return params
 
     def send_message_to_endpoint(self, endpoint: str, method: str, message: dict, authenticated: bool = True):
-        """
-        Send a message to an endpoint.
-        """
+        """Send a message to an endpoint."""
         payload = from_message_to_payload(message)
         response = requests.request(
             method,
             self.rest_url + endpoint,
-            headers={} if not authenticated else self.authenticated_headers,
+            headers=self.authenticated_headers if authenticated else {},
             json=payload,
+            timeout=TIMEOUT,
         )
         if response.status_code != 200:
-            raise Exception(f"Failed to send message: {response.text} {response.status_code} {self.rest_url} {payload}")
+            raise ConnectionError(f"Failed to send message: {response.text} {response.status_code} {self.rest_url} {payload}")
         return response.json()
 
     def withdraw(self, subaccount_id: int, quantity: int, asset: str = "USDB"):
-        """
-        Generate a withdrawal message and sign it.
-        """
-
+        """Generate a withdrawal message and sign it."""
         message = self.generate_and_sign_message(
             Withdraw,
             quantity=int(quantity * 1e18),
@@ -119,9 +118,7 @@ class HundredXClient:
         time_in_force: TimeInForce,
         nonce: int = 0,
     ):
-        """
-        Create an order.
-        """
+        """Create an order."""
         ts = self._current_timestamp()
         if nonce == 0:
             nonce = ts
@@ -150,9 +147,7 @@ class HundredXClient:
         order_id_to_cancel: str,
         nonce: int = 0,
     ):
-        """
-        Cancel and replace an order.
-        """
+        """Cancel and replace an order."""
         ts = self._current_timestamp()
         if nonce == 0:
             nonce = ts
@@ -169,15 +164,14 @@ class HundredXClient:
             expiration=(ts + 1000 * 60 * 60 * 24) * 1000,
             **self.get_shared_params(),
         )
-        message = {}
-        message["newOrder"] = from_message_to_payload(_message)
-        message["idToCancel"] = order_id_to_cancel
+        message = {
+            "newOrder": from_message_to_payload(_message),
+            "idToCancel": order_id_to_cancel,
+        }
         return self.send_message_to_endpoint("/v1/order/cancel-and-replace", "POST", message)
 
     def cancel_order(self, subaccount_id: int, product_id: int, order_id: int):
-        """
-        Cancel an order.
-        """
+        """Cancel an order."""
         message = self.generate_and_sign_message(
             CancelOrder,
             subAccountId=subaccount_id,
@@ -188,9 +182,7 @@ class HundredXClient:
         return self.send_message_to_endpoint("/v1/order", "DELETE", message)
 
     def cancel_all_orders(self, subaccount_id: int, product_id: int):
-        """
-        Cancel all orders.
-        """
+        """Cancel all orders."""
         message = self.generate_and_sign_message(
             CancelOrders,
             subAccountId=subaccount_id,
@@ -200,6 +192,7 @@ class HundredXClient:
         return self.send_message_to_endpoint("/v1/openOrders", "DELETE", message)
 
     def create_authenticated_session_with_service(self):
+        """Log in and return session cookie."""
         login_payload = self.generate_and_sign_message(
             LoginMessage,
             message=LOGIN_MESSAGE,
@@ -211,147 +204,126 @@ class HundredXClient:
         return response
 
     def list_products(self) -> List[Any]:
-        """
-        Get a list of all available products.
-        """
-        return requests.get(self.rest_url + "/v1/products").json()
+        """Get a list of all available products."""
+        return requests.get(f"{self.rest_url}/v1/products", timeout=TIMEOUT).json()
 
     def get_product(self, product_symbol: str) -> Any:
-        """
-        Get the details of a specific product.
-        """
-        return requests.get(self.rest_url + f"/v1/products/{product_symbol}").json()
+        """Get the details of a specific product."""
+        return requests.get(f"{self.rest_url}/v1/products/{product_symbol}", timeout=TIMEOUT).json()
 
     def get_trade_history(self, symbol: str, lookback: int) -> Any:
-        """
-        Get the trade history for a specific product symbol and lookback amount.
-        """
+        """Get the trade history for a specific product symbol and lookback amount."""
         return requests.get(
-            self.rest_url + "/v1/trade-history",
+            f"{self.rest_url}/v1/trade-history",
             params={"symbol": symbol, "lookback": lookback},
+            timeout=TIMEOUT,
         ).json()
 
     def get_server_time(self) -> Any:
-        """
-        Get the server time.
-        """
-        return requests.get(self.rest_url + "/v1/time").json()
+        """Get the server time."""
+        return requests.get(f"{self.rest_url}/v1/time", timeout=TIMEOUT).json()
 
     def get_candlestick(self, symbol: str, **kwargs) -> Any:
-        """
-        Get the candlestick data for a specific product.
-        """
+        """Get the candlestick data for a specific product."""
         params = {"symbol": symbol}
         for arg in ["interval", "start_time", "end_time", "limit"]:
             var = kwargs.get(arg)
             if var is not None:
                 params[arg] = var
-        return requests.get(
-            self.rest_url + "/v1/uiKlines",
-            params=params,
-        ).json()
+        return requests.get(f"{self.rest_url}/v1/uiKlines", params=params, timeout=TIMEOUT).json()
 
     def get_symbol(self, symbol: str) -> Any:
-        """
-        Get the details of a specific symbol.
-        """
+        """Get the details of a specific symbol."""
         endpoint = f"/v1/ticker/24hr?symbol={symbol}"
-        return requests.get(self.rest_url + endpoint).json()[0]
+        return requests.get(self.rest_url + endpoint, timeout=TIMEOUT).json()[0]
 
     def get_depth(self, symbol: str, **kwargs) -> Any:
-        """
-        Get the depth data for a specific product.
-        """
+        """Get the depth data for a specific product."""
         params = {"symbol": symbol}
         for arg in ["limit"]:
             var = kwargs.get(arg)
             if var is not None:
                 params[arg] = var
-        return requests.get(
-            self.rest_url + "/v1/depth",
-            params=params,
-        ).json()
+        return requests.get(f"{self.rest_url}/v1/depth", params=params, timeout=TIMEOUT).json()
 
     def login(self):
-        """
-        Login to the exchange.
-        """
+        """Login to the exchange."""
         response = self.create_authenticated_session_with_service()
         if response is None:
-            raise Exception("Failed to login")
+            raise ConnectionError("Failed to login")
 
     def get_session_status(self):
-        """
-        Get the current session status.
-        """
-        return requests.get(self.rest_url + "/v1/session/status", headers=self.authenticated_headers).json()
+        """Get the current session status."""
+        return requests.get(
+            f"{self.rest_url}/v1/session/status",
+            headers=self.authenticated_headers,
+            timeout=TIMEOUT,
+        ).json()
 
     @property
     def authenticated_headers(self):
-        return {
-            "cookie": f"connectedAddress={self.session_cookie}",
-        }
+        """Get the authenticated headers."""
+        return {"cookie": f"connectedAddress={self.session_cookie}"}
 
     def logout(self):
-        """
-        Logout from the exchange.
-        """
-        return requests.get(self.rest_url + "/v1/session/logout", headers=self.authenticated_headers).json()
+        """Logout from the exchange."""
+        return requests.get(
+            f"{self.rest_url}/v1/session/logout",
+            headers=self.authenticated_headers,
+            timeout=TIMEOUT,
+        ).json()
 
     def get_spot_balances(self):
-        """
-        Get the spot balances.
-        """
+        """Get the spot balances."""
         return requests.get(
-            self.rest_url + "/v1/balances",
+            f"{self.rest_url}/v1/balances",
             headers=self.authenticated_headers,
-            params={"account": self.public_key, "subAccountId": self.subaccount_id},
+            params={
+                "account": self.public_key,
+                "subAccountId": self.subaccount_id,
+            },
+            timeout=TIMEOUT,
         ).json()
 
     def get_position(self, symbol: str):
-        """
-        Get the position for a specific symbol.
-        """
+        """Get the position for a specific symbol."""
         return requests.get(
-            self.rest_url + "/v1/positionRisk",
+            f"{self.rest_url}/v1/positionRisk",
             headers=self.authenticated_headers,
             params={
                 "symbol": symbol,
                 "account": self.public_key,
                 "subAccountId": self.subaccount_id,
             },
+            timeout=TIMEOUT,
         ).json()
 
     def get_approved_signers(self):
-        """
-        Get the approved signers.
-        """
+        """Get the approved signers."""
         return requests.get(
-            self.rest_url + "/v1/approved-signers",
+            f"{self.rest_url}/v1/approved-signers",
             headers=self.authenticated_headers,
-            params={"account": self.public_key, "subAccountId": self.subaccount_id},
+            params={
+                "account": self.public_key,
+                "subAccountId": self.subaccount_id,
+            },
+            timeout=TIMEOUT,
         ).json()
 
-    def get_open_orders(
-        self,
-        symbol: str = None,
-    ):
-        """
-        Get the open orders.
-        """
+    def get_open_orders(self,symbol: str | None = None):
+        """Get the open orders."""
         params = {"account": self.public_key, "subAccountId": self.subaccount_id}
         if symbol is not None:
             params["symbol"] = symbol
         return requests.get(
-            self.rest_url + "/v1/openOrders",
+            f"{self.rest_url}/v1/openOrders",
             headers=self.authenticated_headers,
             params=params,
+            timeout=TIMEOUT,
         ).json()
 
-    def get_orders(self, symbol: str = None, ids: List[str] = None):
-        """
-        Get the open orders.
-        """
+    def get_orders(self, symbol: str | None = None, ids: List[str] | None = None):
+        """Get the open orders."""
         params = {"account": self.public_key, "subAccountId": self.subaccount_id}
 
         if ids is not None:
@@ -360,20 +332,19 @@ class HundredXClient:
             params["symbol"] = symbol
 
         response = requests.get(
-            self.rest_url + "/v1/orders",
+            f"{self.rest_url}/v1/orders",
             headers=self.authenticated_headers,
             params=params,
+            timeout=TIMEOUT,
         )
-        if response.status_code != 200:
-            raise Exception(
+        if response.status_code != SUCCESS_CODE:
+            raise ConnectionError(
                 f"Failed to get orders: {response.text} {response.status_code} " + f"{self.rest_url} {params}"
             )
         return response.json()
 
     def set_referral_code(self):
-        """
-        Ensure sign a referral code.
-        """
+        """Ensure sign a referral code."""
         referral_payload = self.generate_and_sign_message(
             Referral,
             code=REFERRAL_CODE,
@@ -381,16 +352,13 @@ class HundredXClient:
         )
         try:
             return self.send_message_to_endpoint("/v1/referral/add-referee", "POST", referral_payload)
-        except Exception as e:
-
-            if "user already referred" in str(e):
+        except Exception as exc:
+            if "user already referred" in str(exc):
                 return
-            raise e
+            raise exc
 
     def deposit(self, subaccount_id: int, quantity: int, asset: str = "USDB"):
-        """
-        Deposit an asset.
-        """
+        """Deposit an asset."""
         # we need to check if we have sufficient balance to deposit
         required_wei = int(Decimal(str(quantity)) * Decimal(1e18))
         # we check the approvals
@@ -410,7 +378,7 @@ class HundredXClient:
             )
             signed_txn = self.wallet.sign_transaction(txn)
             result = self.web3.eth.send_raw_transaction(signed_txn.rawTransaction)
-            # we wait for the transaction to be mined
+            # we wait for the transaction to be confirmed
             self.wait_for_transaction(result)
 
         protocol_contract = self.get_contract("PROTOCOL")
@@ -429,10 +397,11 @@ class HundredXClient:
         result = self.web3.eth.send_raw_transaction(signed_txn.rawTransaction)
         return self.wait_for_transaction(result)
 
-    def wait_for_transaction(self, txn_hash, timeout=60):
+    def wait_for_transaction(self, txn_hash, timeout=TIMEOUT):
+        """Wait for a transaction to be confirmed."""
         while True:
             if timeout == 0:
-                raise Exception("Timeout")
+                raise ConnectionError("Timeout")
             try:
                 receipt = self.web3.eth.get_transaction_receipt(txn_hash)
                 if receipt is not None:
@@ -443,15 +412,11 @@ class HundredXClient:
         return receipt["status"] == 1
 
     def get_contract_address(self, name: str):
-        """
-        Get the contract address for a specific asset.
-        """
+        """Get the contract address for a specific asset."""
         return self.web3.to_checksum_address(CONTRACTS[self.env][name])
 
     def get_contract(self, name: str):
-        """
-        Get the contract for a specific asset.
-        """
+        """Get the contract for a specific asset."""
         abis = {
             "USDB": ERC_20_ABI,
             "PROTOCOL": PROTOCOL_ABI,
