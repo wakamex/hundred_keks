@@ -65,3 +65,15 @@ exclude = '''
   | dist
 )/
 '''
+
+[tool.pytest.ini_options]
+markers = [
+    "dev: test devnet (deselect with '-m dev')",
+]
+addopts = [
+  "-m not dev",
+  "-r A",
+  "--tb=long",
+  "--verbosity=2",
+  "--log-cli-level=INFO",
+]
