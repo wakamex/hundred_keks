@@ -143,7 +143,7 @@ class Testnet(TestCase):
         """Test the get_position method of the Client class."""
         self.client.login()
         position = self.client.get_position(DEFAULT_SYMBOL)
-        assert position is not None
+        assert "account" in position
 
     def test_get_approved_signers(self):
         """Test the get_approved_signers method of the Client class."""
