@@ -1,5 +1,6 @@
 """Tests for the hundred.client module."""
 
+import time
 from datetime import datetime
 from unittest import TestCase
 
@@ -19,6 +20,26 @@ TEST_ORDER = {
     "price": 3000,
     "side": OrderSide.BUY,
     "order_type": OrderType.LIMIT,
+    "time_in_force": TimeInForce.GTC,
+}
+
+TEST_MARKET_BUY = {
+    "subaccount_id": 0,
+    "product_id": 1002,
+    "quantity": 0.01,
+    "price": 3000,
+    "side": OrderSide.BUY,
+    "order_type": OrderType.MARKET,
+    "time_in_force": TimeInForce.GTC,
+}
+
+TEST_MARKET_SELL = {
+    "subaccount_id": 0,
+    "product_id": 1002,
+    "quantity": 0.01,
+    "price": 3000,
+    "side": OrderSide.SELL,
+    "order_type": OrderType.MARKET,
     "time_in_force": TimeInForce.GTC,
 }
 
@@ -139,10 +160,14 @@ class Testnet(TestCase):
         balance = self.client.get_spot_balances()
         assert balance is not None
 
+    # @pytest.mark.skip(reason="Can't place market buys on testnet")
     def test_get_position(self):
         """Test the get_position method of the Client class."""
         self.client.login()
-        position = self.client.get_position(DEFAULT_SYMBOL)
+        self.client.create_order(**TEST_MARKET_SELL)
+        time.sleep(1)
+        position = self.client.get_position()
+        print(f"{position=}")
         assert "account" in position
 
     def test_get_approved_signers(self):
