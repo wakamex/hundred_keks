@@ -16,7 +16,7 @@ MAINNET_WEBSOCKET_URL = "https://stream.100x.finance"
 BLAST_MAINNET_RPC = "https://rpc.blast.io"
 BLAST_SEPOLIA_RPC = "https://sepolia.blast.io"
 
-REFERRAL_CODE = "8baller"
+REFERRAL_CODE = "wakamex"
 
 APIS = {
     Environment.TESTNET: {
