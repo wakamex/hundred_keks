@@ -287,13 +287,12 @@ class HundredXClient:
             timeout=TIMEOUT,
         ).json()
 
-    def get_position(self, symbol: str):
-        """Get the position for a specific symbol."""
+    def get_position(self):
+        """Get all positions for the subaccount."""
         return requests.get(
             f"{self.rest_url}/v1/positionRisk",
             headers=self.authenticated_headers,
             params={
-                "symbol": symbol,
                 "account": self.public_key,
                 "subAccountId": self.subaccount_id,
             },
