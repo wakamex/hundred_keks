@@ -117,6 +117,7 @@ class HundredXClient:
         order_type: OrderType,
         time_in_force: TimeInForce,
         nonce: int = 0,
+        duration: int = 1000,
     ):
         """Create an order."""
         ts = self._current_timestamp()
@@ -132,7 +133,7 @@ class HundredXClient:
             orderType=order_type.value,
             timeInForce=time_in_force.value,
             nonce=nonce,
-            expiration=(ts + 1000 * 60 * 60 * 24) * 1000,
+            expiration=ts + duration,
             **self.get_shared_params(),
         )
         return self.send_message_to_endpoint("/v1/order", "POST", message)
@@ -146,6 +147,7 @@ class HundredXClient:
         side: OrderSide,
         order_id_to_cancel: str,
         nonce: int = 0,
+        duration: int = 1000,
     ):
         """Cancel and replace an order."""
         ts = self._current_timestamp()
@@ -161,7 +163,7 @@ class HundredXClient:
             orderType=OrderType.LIMIT_MAKER.value,
             timeInForce=TimeInForce.GTC.value,
             nonce=nonce,
-            expiration=(ts + 1000 * 60 * 60 * 24) * 1000,
+            expiration=ts + duration,
             **self.get_shared_params(),
         )
         message = {
