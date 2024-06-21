@@ -8,78 +8,30 @@ import pytest
 
 from hundred_x.client import HundredXClient
 from hundred_x.eip_712 import Order, Withdraw
-from hundred_x.enums import Environment, OrderSide, OrderType, TimeInForce
-
-DEFAULT_SYMBOL = "ethperp"
-TEST_PRIVATE_KEY = "0x8f58e47491ac5fe6897216208fe1fed316d6ee89de6c901bfc521c2178ebe6dd"
-TEST_ADDRESS = "0xEEF7faba495b4875d67E3ED8FB3a32433d3DB3b3"
-TEST_ORDER = {
-    "subaccount_id": 1,
-    "product_id": 1002,
-    "quantity": 1,
-    "price": 3000,
-    "side": OrderSide.BUY,
-    "order_type": OrderType.LIMIT,
-    "time_in_force": TimeInForce.GTC,
-}
-
-TEST_MARKET_BUY = {
-    "subaccount_id": 0,
-    "product_id": 1002,
-    "quantity": 0.01,
-    "price": 3000,
-    "side": OrderSide.BUY,
-    "order_type": OrderType.MARKET,
-    "time_in_force": TimeInForce.GTC,
-}
-
-TEST_MARKET_SELL = {
-    "subaccount_id": 0,
-    "product_id": 1002,
-    "quantity": 0.01,
-    "price": 3000,
-    "side": OrderSide.SELL,
-    "order_type": OrderType.MARKET,
-    "time_in_force": TimeInForce.GTC,
-}
-
-CANCEL_AND_REPLACE_ORDER = {
-    "subaccount_id": 1,
-    "product_id": 1002,
-    "quantity": 1,
-    "price": 3000,
-    "side": OrderSide.BUY,
-}
-
-TEST_ORDER_DECIMAL_QUANTITY = {
-    "subaccount_id": 1,
-    "product_id": 1006,
-    "quantity": 4000.73,
-    "price": 4,
-    "side": OrderSide.BUY,
-    "order_type": OrderType.LIMIT,
-    "time_in_force": TimeInForce.GTC,
-}
-
-TEST_ORDER_DECIMAL_PRICE = {
-    "subaccount_id": 1,
-    "product_id": 1002,
-    "quantity": 1,
-    "price": 3000.13,
-    "side": OrderSide.BUY,
-    "order_type": OrderType.LIMIT,
-    "time_in_force": TimeInForce.GTC,
-}
+from hundred_x.enums import Environment
+from tests.test_data import (
+    CANCEL_AND_REPLACE_ORDER,
+    DEFAULT_SYMBOL,
+    TEST_MARKET_BUY,
+    TEST_MARKET_SELL,
+    TEST_ORDER,
+    TEST_ORDER_DECIMAL_PRICE,
+    TEST_ORDER_DECIMAL_QUANTITY,
+    TEST_PRIVATE_KEY,
+)
 
 
-class Testnet(TestCase):
+class Client:
     """Base class for the Client class tests."""
 
     environment: Environment = Environment.TESTNET
 
     def setUp(self):
         """Set up the Client class tests."""
-        self.client = HundredXClient(private_key=TEST_PRIVATE_KEY, env=self.environment, subaccount_id=1)
+        self.client = HundredXClient(env=self.environment, private_key=TEST_PRIVATE_KEY, subaccount_id=1)
+
+    def tearDown(self):
+        """Tear down the Client class tests."""
         cancel_order = self.client.cancel_all_orders(subaccount_id=1, product_id=1002)
         assert cancel_order is not None
         cancel_order = self.client.cancel_all_orders(subaccount_id=1, product_id=1006)
@@ -168,6 +120,7 @@ class Testnet(TestCase):
         time.sleep(1)
         position = self.client.get_position()
         print(f"{position=}")
+        self.client.create_order(**TEST_MARKET_BUY)
         assert "account" in position
 
     def test_get_approved_signers(self):
@@ -292,12 +245,13 @@ class Testnet(TestCase):
 
 
 @pytest.mark.dev
-class Devnet(Testnet):
+class TestDevClient(Client, TestCase):
     """Base class for the Client class tests."""
 
-    environment: Environment
+    environment: Environment = Environment.DEVNET
 
-    def setUp(self):
-        """Set up the Client class tests."""
-        self.environment = Environment.DEVNET
-        self.client = HundredXClient(private_key=TEST_PRIVATE_KEY, env=self.environment, subaccount_id=1)
+
+class TestStagingClient(Client, TestCase):
+    """Base class for the Client class tests."""
+
+    environment: Environment = Environment.TESTNET

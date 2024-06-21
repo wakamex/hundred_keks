@@ -11,9 +11,10 @@ from eth_account.messages import encode_structured_data
 from web3 import Web3
 from web3.exceptions import TransactionNotFound
 
-from hundred_x.constants import APIS, CONTRACTS, LOGIN_MESSAGE, REFERRAL_CODE, RPCS, SUCCESS_CODE
+from hundred_x.constants import APIS, CONTRACTS, LOGIN_MESSAGE, REFERRAL_CODE, RPC_URLS, SUCCESS_CODE
 from hundred_x.eip_712 import CancelOrder, CancelOrders, LoginMessage, Order, Referral, Withdraw
 from hundred_x.enums import ApiType, Environment, OrderSide, OrderType, TimeInForce
+from hundred_x.exceptions import ClientError, UserInputValidationError
 from hundred_x.utils import from_message_to_payload, get_abi
 
 load_dotenv()
@@ -32,25 +33,52 @@ TIMEOUT = 60
 class HundredXClient:
     """The 100x client."""
 
+    private_functions: List[str] = [
+        "/v1/withdraw",
+        "/v1/order",
+        "/v1/order/cancel-and-replace",
+        "/v1/order",
+        "/v1/openOrders",
+        "/v1/orders",
+        "/v1/balances",
+        "/v1/positionRisk",
+        "/v1/approved-signers",
+        "/v1/session/login",
+        "/v1/referral/add-referee",
+        "/v1/session/logout",
+    ]
+    public_functions: List[str] = [
+        "/v1/products",
+        "/v1/products/{product_symbol}",
+        "/v1/trade-history",
+        "/v1/time",
+        "/v1/uiKlines",
+        "/v1/ticker/24hr",
+        "/v1/depth",
+    ]
+
     def __init__(
         self,
-        private_key: str,
         env: Environment = Environment.TESTNET,
+        private_key: str | None = None,
         subaccount_id: int = 0,
-        rpc_uri: str | None = None,
     ):
         """Initialize the client with the given environment."""
-        if subaccount_id < 0 or subaccount_id > 255:
-            raise ValueError("Subaccount ID must be a number between 0 and 255.")
         self.env = env
-        self.rpc_uri = rpc_uri or RPCS[env]
         self.rest_url = APIS[env][ApiType.REST]
         self.websocket_url = APIS[env][ApiType.WEBSOCKET]
-        self.subaccount_id = subaccount_id
+        if any([not self.rest_url, not self.websocket_url]):
+            raise UserInputValidationError(
+                f"Invalid environment: {env} Missing REST or WEBSOCKET URL for the environment."
+            )
+        self.web3 = Web3(Web3.HTTPProvider(RPC_URLS[env]))
+        if private_key:
+            self.wallet = self.web3.eth.account.from_key(private_key)
+            self.public_key = self.wallet.address
+            if subaccount_id < 0 or subaccount_id > 255:
+                raise ValueError("Subaccount ID must be a number between 0 and 255.")
+            self.subaccount_id = subaccount_id
         self.session_cookie = {}
-        self.web3 = Web3(Web3.HTTPProvider(self.rpc_uri))
-        self.wallet = self.web3.eth.account.from_key(private_key)
-        self.public_key = self.wallet.address
         self.domain = make_domain(
             name="100x",
             version="0.0.0",
@@ -58,6 +86,22 @@ class HundredXClient:
             verifyingContract=CONTRACTS[env]["VERIFYING_CONTRACT"],
         )
         self.set_referral_code()
+
+    def _validate_function(
+        self,
+        endpoint,
+    ):
+        """Check if the endpoint is a private function."""
+        if endpoint not in self.private_functions + self.public_functions:
+            raise ClientError(f"Invalid endpoint: {endpoint} Not in {self.private_functions + self.public_functions}")
+        if endpoint in self.public_functions:
+            return True
+        if endpoint in self.private_functions:
+            if not self.wallet:
+                raise UserInputValidationError(
+                    f"Private function {endpoint} requires a private key please provide one at initialization."
+                )
+            return True
 
     def _current_timestamp(self):
         """Return current timestamp in milliseconds."""
@@ -85,6 +129,8 @@ class HundredXClient:
 
     def send_message_to_endpoint(self, endpoint: str, method: str, message: dict, authenticated: bool = True):
         """Send a message to an endpoint."""
+        if not self._validate_function(endpoint):
+            raise ClientError(f"Invalid endpoint: {endpoint}")
         payload = from_message_to_payload(message)
         response = requests.request(
             method,
