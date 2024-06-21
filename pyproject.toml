@@ -11,6 +11,7 @@ readme = "README.md"
 dependencies = [
   "eip712-structs@git+https://github.com/wakamex/py-eip712-structs.git",
   "web3",
+  "python-dotenv",
 ]
 
 [project.optional-dependencies]
