@@ -87,10 +87,7 @@ class HundredXClient:
         )
         self.set_referral_code()
 
-    def _validate_function(
-        self,
-        endpoint,
-    ):
+    def _validate_function(self,endpoint):
         """Check if the endpoint is a private function."""
         if endpoint not in self.private_functions + self.public_functions:
             raise ClientError(f"Invalid endpoint: {endpoint} Not in {self.private_functions + self.public_functions}")
@@ -118,9 +115,7 @@ class HundredXClient:
 
     def get_shared_params(self, asset: str | None = None, subaccount_id: int | None = None):
         """Return shared parameters for requests."""
-        params = {
-            "account": self.public_key,
-        }
+        params = {"account": self.public_key}
         if asset is not None:
             params["asset"] = self.get_contract_address(asset)
         if subaccount_id is not None:
@@ -179,7 +174,7 @@ class HundredXClient:
             orderType=order_type.value,
             timeInForce=time_in_force.value,
             nonce=nonce,
-            expiration=ts + duration,
+            expiration0=ts + duration,
             **self.get_shared_params(),
         )
         return self.send_message_to_endpoint("/v1/order", "POST", message)
