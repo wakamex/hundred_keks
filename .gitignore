@@ -117,3 +117,7 @@ site/
 *trader
 
 node_modules
+.csv
+.png
+.parquet
+.key
